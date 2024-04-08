@@ -1,0 +1,337 @@
+notes
+
+
+
+<?php
+
+include 'client/shop.php';
+// Handle adding product to cart
+if (isset($_POST['add_to_cart'])) {
+    $product_id = $_POST['product_id'];
+
+    // Check if the product is already in the cart
+    $cart_index = array_search($product_id, array_column($_SESSION['cart'], 'product_id'));
+
+    if ($cart_index !== false) {
+        // If the product is already in the cart, update its quantity to 1
+        $_SESSION['cart'][$cart_index]['quantity'] = 1;
+
+        // Update the quantity in the database for the existing order
+        $query_update = "UPDATE cart SET quantity = ? WHERE product_id = ?";
+        $stmt_update = $db->prepare($query_update);
+        $stmt_update->execute([1, $product_id]);
+
+        echo "<script>alert('Product quantity updated in cart.');</script>";
+    } else {
+        // Fetch product details including stock quantity from the database
+        $query_product = "SELECT product_name, stock_quantity, price FROM products WHERE product_id = ?";
+        $stmt_product = $db->prepare($query_product);
+        $stmt_product->execute([$product_id]);
+        $product_data = $stmt_product->fetch(PDO::FETCH_ASSOC);
+
+        if ($product_data && isset($product_data['stock_quantity'])) {
+            $available_quantity = $product_data['stock_quantity'];
+
+            // Add the product to the cart session with quantity 1
+            $_SESSION['cart'][] = [
+                'product_id' => $product_id,
+                'quantity' => 1,
+            ];
+
+            // Insert the new order into the database with quantity 1
+            $query_insert = "INSERT INTO cart (product_id, quantity) VALUES (?, ?)";
+            $stmt_insert = $db->prepare($query_insert);
+            $stmt_insert->execute([$product_id, 1]);
+
+            echo "<script>alert('Product added to cart successfully.');</script>";
+        } else {
+            echo "<script>alert('Product not found or stock quantity not available.');</script>";
+        }
+    }
+}
+
+
+$query = "SELECT product_id, product_name, description, price, stock_quantity, image_url FROM products";
+$stmt = $db->prepare($query);
+$stmt->execute();
+$products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Online Shop</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Link to your CSS file -->
+    <style>
+        /* Additional styles for product cards and cart */
+        * {
+            color: red;
+        }
+        .container {
+            width: 50%;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 120px;
+        }
+
+        .product-container {
+            width: 70%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .product-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            width: 100%;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: box-shadow 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .product-card:hover {
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .product-image img {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+
+        .product-details {
+            flex-grow: 1;
+            padding: 0 10px;
+        }
+
+        .cart {
+            width: 25%;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .cart h2 {
+            margin-bottom: 10px;
+        }
+
+        .cart-items {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .cart-item {
+            margin-bottom: 10px;
+        }
+
+        .total-price {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+
+        .checkout-btn {
+            display: block;
+            width: 100%;
+            text-align: center;
+            padding: 10px;
+            margin-top: 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btns {
+            color: red;
+        }
+        .out-of-stock {
+            color: #777;
+            cursor: not-allowed;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .already-in-cart {
+            font-size: 16px;
+            color: #777;
+            cursor: not-allowed;
+            background-color: #f0f0f0;
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+
+        .quantity-input {
+            width: 40px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+       
+        <div class="product-container">
+        <?php
+           foreach ($products as $product) {
+            $product_id = $product['product_id'];
+            $stock_quantity = $product['stock_quantity'];
+        
+            $cart_index = array_search($product_id, $_SESSION['cart']);
+
+
+
+        
+            if ($cart_index !== false) {
+                // Product is already in cart, disable "Add to Cart" button and show "Already in Cart"
+                $add_to_cart_btn_class = 'already-in-cart'; // Add a new CSS class for disabled button
+                $add_to_cart_text = 'Already in Cart';
+                $disabled_attribute = 'disabled'; // Add 'disabled' attribute to disable the button
+                echo "<p>Found</p>";
+            } elseif ($stock_quantity <= 0) {
+                echo "<p>Out Of Stock</p>";
+
+                // Product is out of stock, disable "Add to Cart" button and show "Out of Stock"
+                $add_to_cart_btn_class = 'out-of-stock'; // Use 'out-of-stock' class for disabled button
+                $add_to_cart_text = 'Out of Stock';
+                $disabled_attribute = 'disabled'; // Add 'disabled' attribute to disable the button
+            } else {
+                echo "<p>Not Found in Cart</p>";
+
+                // Product is not in cart and in stock, enable "Add to Cart" button
+                $add_to_cart_btn_class = 'btns'; // Use 'btns' class for enabled button
+                $add_to_cart_text = 'Add to Cart';
+                $disabled_attribute = ''; // No 'disabled' attribute
+            }
+        
+            echo "<div class='product-card'>";
+            echo "<div class='product-image'>";
+            if (!empty($product['image_url'])) {
+                echo "<img src='" . $product['image_url'] . "' alt='" . $product['product_name'] . "' />";
+            } else {
+                echo "<p>No image available</p>";
+            }
+            echo "</div>";
+            echo "<div class='product-details'>";
+            echo "<h3>" . $product['product_name'] . "</h3>";
+            echo "<p>Description: " . $product['description'] . "</p>";
+            echo "<p>Price: $" . $product['price'] . "</p>";
+            echo "<p>Stocks Available: " . $stock_quantity . "</p>";
+            if ($stock_quantity > 0) { // Check if stock is available
+                echo "<form method='post'>"; // Form for "Add to Cart" button
+                echo "<input type='hidden' name='product_id' value='" . $product_id . "'>";
+                echo "<button type='submit' name='add_to_cart' class='" . $add_to_cart_btn_class . "' " . $disabled_attribute . ">" . $add_to_cart_text . "</button>";
+
+                echo "</form>";
+            } else {
+                echo "<a href='#' class='out-of-stock'>$add_to_cart_text</a>"; // Display "Out of Stock" link
+            }
+            echo "<form method='get' action='product_details.php'>";
+            echo "<input type='hidden' name='product_id' value='" . $product_id . "'>";
+            echo "<button type='submit' name='view_product' class='btns'>View Product</button>";
+            echo "</form>";
+            echo "</div>";
+            echo "</div>";
+        }
+        
+            
+        ?>
+        </div>
+        <div class="cart">
+            <h2>Your Cart</h2>
+            <?php
+        // Display cart items with merged duplicates
+        if (!empty($_SESSION['cart'])) {
+            $cart_items = array_count_values($_SESSION['cart']); // Count occurrences of each product ID in the cart
+            $total_price = 0; // Initialize total price
+
+            foreach ($cart_items as $product_id => $quantity) {
+                // Fetch product details from the database
+                $query_cart = "SELECT product_id, product_name, price, stock_quantity FROM products WHERE product_id = ?";
+                $stmt_cart = $db->prepare($query_cart);
+                $stmt_cart->execute([$product_id]);
+                $cart_product = $stmt_cart->fetch(PDO::FETCH_ASSOC);
+
+                if ($cart_product) {
+
+               //  include 'client/cart_items.php';
+                    
+
+                    echo "<div class='cart-item'>";
+                    echo "<p>Name: " . $cart_product['product_name'] . "</p>";
+                    echo "<div class='quantity-adjust'>";
+                    echo "<input type='number' class='quantity-input' name='quantity[" . $product_id . "]' id='quantity_" . $product_id . "' min='1' max='" . ($cart_product['stock_quantity'] ?? 1) . "' value='" . $quantity . "' onchange='updateQuantity($product_id, this.value)'>";
+                    echo "</div>";
+                   /* foreach ($cart_items as $item) {
+                        $total_price += ($item['price'] * $item['total_quantity']);
+                        
+
+                    }
+                    */
+
+
+                    $total_item_price = $quantity * $cart_product['price']; // Calculate total price for this item
+                    echo "<p class='item-price' id='item_price_$product_id'>Price: $" . $total_item_price . "</p>";
+
+                    
+
+                    echo '<form method="post" action="remove_item.php">';
+                    echo '<input type="hidden" name="remove_product" value="true">';
+                    echo "<input type='hidden' name='product_id' value='". $product_id. "'>";
+                    echo '<button type="submit">Remove Product</button>';
+                    echo '</form>';
+
+
+                    echo "</div>";
+                }
+            }
+
+            echo "<div class='total-price' id='total'>";
+            echo "<p>Total Price: $" . $total_price . "</p>";
+            echo "</div>";
+            
+            echo "<a href='checkout.php' class='checkout-btn'>Checkout</a>"; // Checkout button
+        } else {
+            echo "<p>Your cart is empty</p>";
+        }
+        ?>
+        </div>
+
+    </div>
+
+</body>
+</html>
+<!-- JavaScript for updating quantity and total price -->
+<script>
+    function updateQuantity(productId, quantity) {
+    let xhr = new XMLHttpRequest();
+    xhr.open("POST", "update_quantity.php", true);
+    xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+            let response = JSON.parse(xhr.responseText);
+            if (response.success) {
+                // Update the total price element with the updated total price
+                document.getElementById('total_price').textContent = 'Total Price: $' + response.total_price;
+            } else {
+                alert('Failed to update quantity.');
+            }
+        }
+    };
+    xhr.send("product_id=" + productId + "&quantity=" + quantity);
+
+    // Update the value of the quantity input field after the AJAX request
+    document.getElementById('quantity_' + productId).value = quantity;
+}
+
+</script>
